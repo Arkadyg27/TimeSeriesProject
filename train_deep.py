@@ -46,7 +46,7 @@ def train_lstm_autoencoder(dataset_name='Altamira', num_epochs=10, batch_size=51
     os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
     if os.environ.get("MLFLOW_TRACKING_URI"):
         mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
-    mlflow.set_experiment(f"DynaLand_{dataset_name}_DeepLearning")
+    mlflow.set_experiment(f"DeepLearning_{dataset_name}_LSTM_AE")
     
     t_start = time.time()
     with mlflow.start_run(run_name="LSTM_Autoencoder_Phase3"):
@@ -168,4 +168,6 @@ def train_lstm_autoencoder(dataset_name='Altamira', num_epochs=10, batch_size=51
         print(f"Logged LSTM Autoencoder run to MLflow successfully! Saved TIFF: {tiff_path} and Figure: {fig_path}")
 
 if __name__ == '__main__':
-    train_lstm_autoencoder()
+    train_lstm_autoencoder(dataset_name='Altamira')
+    train_lstm_autoencoder(dataset_name='Brumadinho')
+    train_lstm_autoencoder(dataset_name='Mariana')
