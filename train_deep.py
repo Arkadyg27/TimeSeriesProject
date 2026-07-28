@@ -116,10 +116,14 @@ def train_lstm_autoencoder(dataset_name='Altamira', num_epochs=10, batch_size=51
         total_anomalies = int(df_metrics['Anomalias'].sum())
         total_regular = int(df_metrics['Regular'].sum())
         total_transitions = int(df_metrics['Mudanças'].sum())
-        
+        mean_transitions = float(df_metrics['media'].iloc[0])
+        std_transitions = float(df_metrics['std'].iloc[0])
+
         mlflow.log_metric("total_anomalies", total_anomalies)
         mlflow.log_metric("total_regular", total_regular)
         mlflow.log_metric("total_transitions", total_transitions)
+        mlflow.log_metric("mean_transitions", mean_transitions)
+        mlflow.log_metric("std_transitions", std_transitions)
         mlflow.log_metric("execution_time_seconds", exec_time)
         mlflow.log_metric("anomaly_threshold", anomaly_threshold)
         
