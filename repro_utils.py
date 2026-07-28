@@ -546,6 +546,14 @@ def log_experiment_to_mlflow(dataset_name, band_name, alpha, beta, model_type, m
     else:
         run_name += f"_nu_{model_params.get('nu')}"
         
+    tiff_dir = f"Tiff/{'leak_free' if leak_free else 'leaky'}/{model_type}"
+    tiff_filename = f"{dataset_name}_{band_name.upper()}_{run_name}.tif"
+    tiff_path = os.path.join(tiff_dir, tiff_filename)
+    
+    if os.path.exists(tiff_path):
+        print(f"Skipping: Model already trained! Found cached result at {tiff_path}")
+        return None
+
     with mlflow.start_run(run_name=run_name) as run:
         # Load raw data
         df_raw = load_raw_data(dataset_name, band_name)
