@@ -531,6 +531,76 @@ def run_experiment_pipeline(df_raw, centered_vals, alpha, beta, model_type, mode
     
     return df_pred, df_metrics, exec_time
 
+def run_baseline_pipeline(df_raw, centered_vals, alpha, leak_free=True):
+    import time
+    N_pixels, N_dates = df_raw.shape
+    print(f"Running Z-Score Baseline (leak_free={leak_free}) on {N_pixels} pixels across {N_dates} dates...")
+    
+    # Create prediction DataFrame, initialize with 1 (regular)
+    df_pred = pd.DataFrame(1, index=df_raw.index, columns=df_raw.columns)
+    
+    t_start = time.time()
+    
+    if leak_free:
+        # Walk-forward envelope calculation (Temporal evaluation protocol)
+        for j in range(N_dates):
+            if j % 20 == 0:
+                print(f"  -> Predicting step {j}/{N_dates}...")
+                
+            # Calculate historical stats up to date j
+            hist_vals = centered_vals[:, :j+1].flatten()
+            hist_vals = hist_vals[~np.isnan(hist_vals)]
+            
+            if len(hist_vals) > 0:
+                mean_j = np.mean(hist_vals)
+                std_j = np.std(hist_vals)
+            else:
+                mean_j = 0.0
+                std_j = 1.0
+                
+            inf_lim = mean_j - alpha * std_j
+            sup_lim = mean_j + alpha * std_j
+            
+            # Check current date values against the envelope
+            current_vals = centered_vals[:, j]
+            valid_idx = ~np.isnan(current_vals)
+            
+            if np.sum(valid_idx) > 0:
+                is_anomaly = (current_vals[valid_idx] < inf_lim) | (current_vals[valid_idx] > sup_lim)
+                pred = np.where(is_anomaly, -1, 1)
+                
+                df_pred.iloc[valid_idx, j] = pred
+                
+    else:
+        # Leaky flow: calculate global envelope once using all time data
+        all_vals = centered_vals.flatten()
+        all_vals = all_vals[~np.isnan(all_vals)]
+        
+        mean_all = np.mean(all_vals)
+        std_all = np.std(all_vals)
+        
+        inf_lim = mean_all - alpha * std_all
+        sup_lim = mean_all + alpha * std_all
+        
+        print("  Running baseline predictions on all dates...")
+        for j in range(N_dates):
+            current_vals = centered_vals[:, j]
+            valid_idx = ~np.isnan(current_vals)
+            
+            if np.sum(valid_idx) > 0:
+                is_anomaly = (current_vals[valid_idx] < inf_lim) | (current_vals[valid_idx] > sup_lim)
+                pred = np.where(is_anomaly, -1, 1)
+                
+                df_pred.iloc[valid_idx, j] = pred
+
+    t_end = time.time()
+    exec_time = t_end - t_start
+    
+    # Calculate metrics exactly like the ML models
+    df_metrics = calculate_metrics(df_pred)
+    
+    return df_pred, df_metrics, exec_time
+
 def log_experiment_to_mlflow(dataset_name, band_name, alpha, beta, model_type, model_params, leak_free):
     os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
     if os.environ.get("MLFLOW_TRACKING_URI"):
