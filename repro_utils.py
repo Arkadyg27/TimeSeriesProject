@@ -679,6 +679,74 @@ def log_experiment_to_mlflow(dataset_name, band_name, alpha, beta, model_type, m
         print(f"Logged run {run_name} to MLflow. Anomalies: {total_anomalies}, Transitions: {total_transitions}, Execution time: {exec_time:.2f}s")
         return df_metrics
 
+def log_baseline_to_mlflow(dataset_name, band_name, alpha, leak_free):
+    os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
+    if os.environ.get("MLFLOW_TRACKING_URI"):
+        mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
+    # Set experiment
+    experiment_name = f"DynaLand_{dataset_name}_{band_name.upper()}"
+    mlflow.set_experiment(experiment_name)
+    
+    # Start MLflow run
+    run_name = f"Baseline_{'leakfree' if leak_free else 'leaky'}"
+        
+    tiff_dir = f"Tiff/{'leak_free' if leak_free else 'leaky'}/Baseline"
+    tiff_filename = f"{dataset_name}_{band_name.upper()}_{run_name}.tif"
+    tiff_path = os.path.join(tiff_dir, tiff_filename)
+    
+    if os.path.exists(tiff_path):
+        print(f"Skipping: Baseline already run! Found cached result at {tiff_path}")
+        return None
+
+    with mlflow.start_run(run_name=run_name) as run:
+        # Load raw data
+        df_raw = load_raw_data(dataset_name, band_name)
+        
+        # For Altamira, we filter columns (dates) where the mean SummaryQA < 1
+        if dataset_name == 'Altamira':
+            qa_df = pd.read_parquet("data_Altamira_SummaryQA.parquet")
+            good_dates = qa_df.columns[qa_df.mean(axis=0) < 1]
+            df_raw = df_raw[good_dates]
+            
+        # Get precomputed centered values (ignoring -99999 by treating it as NaN)
+        centered_vals = get_centered_data(df_raw, dataset_name, band_name, leak_free)
+        
+        # Run pipeline
+        df_pred, df_metrics, exec_time = run_baseline_pipeline(
+            df_raw, centered_vals, alpha, leak_free
+        )
+        
+        # Log parameters
+        mlflow.log_param("dataset", dataset_name)
+        mlflow.log_param("band", band_name)
+        mlflow.log_param("alpha", alpha)
+        mlflow.log_param("model_type", "Baseline_ZScore")
+        mlflow.log_param("leak_free", leak_free)
+            
+        # Log summary metrics
+        total_anomalies = int(df_metrics['Anomalias'].sum())
+        total_regular = int(df_metrics['Regular'].sum())
+        total_transitions = int(df_metrics['Mudanças'].sum())
+        mean_transitions = float(df_metrics['media'].iloc[0])
+        std_transitions = float(df_metrics['std'].iloc[0])
+        
+        mlflow.log_metric("total_anomalies", total_anomalies)
+        mlflow.log_metric("total_regular", total_regular)
+        mlflow.log_metric("total_transitions", total_transitions)
+        mlflow.log_metric("mean_transitions", mean_transitions)
+        mlflow.log_metric("std_transitions", std_transitions)
+        mlflow.log_metric("execution_time_seconds", exec_time)
+        
+        # Save output TIFF
+        os.makedirs(tiff_dir, exist_ok=True)
+        save_tiff_fromdf(df_metrics, ['Anomalias', 'p-valor'], -99999, tiff_path)
+        
+        # Log artifact
+        mlflow.log_artifact(tiff_path)
+        
+        print(f"Logged run {run_name} to MLflow. Anomalies: {total_anomalies}, Transitions: {total_transitions}, Execution time: {exec_time:.2f}s")
+        return df_metrics
+
 def run_and_log_preprocessing(dataset_name, band_name, alpha=0.5):
     # Set experiment
     experiment_name = "DynaLand_Baseline_Reproduction"
