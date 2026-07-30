@@ -603,8 +603,8 @@ def run_baseline_pipeline(df_raw, centered_vals, alpha, leak_free=True):
 
 def log_experiment_to_mlflow(dataset_name, band_name, alpha, beta, model_type, model_params, leak_free):
     os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
-    if os.environ.get("MLFLOW_TRACKING_URI"):
-        mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
+    if "MLFLOW_TRACKING_URI" in os.environ and "sqlite" in os.environ["MLFLOW_TRACKING_URI"]:
+        del os.environ["MLFLOW_TRACKING_URI"]
     # Set experiment
     experiment_name = f"DynaLand_{dataset_name}_{band_name.upper()}"
     mlflow.set_experiment(experiment_name)
@@ -684,11 +684,11 @@ def log_baseline_to_mlflow(dataset_name, band_name, alpha, leak_free):
     if os.environ.get("MLFLOW_TRACKING_URI"):
         mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
     # Set experiment
-    experiment_name = f"DynaLand_{dataset_name}_{band_name.upper()}"
-    mlflow.set_experiment(experiment_name)
+    # Set experiment explicitly to Baseline_Zscore
+    experiment_name = "Baseline_Zscore"
     
     # Start MLflow run
-    run_name = f"Baseline_{'leakfree' if leak_free else 'leaky'}"
+    run_name = f"{dataset_name}_{band_name.upper()}_Baseline_{'leakfree' if leak_free else 'leaky'}"
         
     tiff_dir = f"Tiff/{'leak_free' if leak_free else 'leaky'}/Baseline"
     tiff_filename = f"{dataset_name}_{band_name.upper()}_{run_name}.tif"
