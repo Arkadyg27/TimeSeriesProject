@@ -686,6 +686,7 @@ def log_baseline_to_mlflow(dataset_name, band_name, alpha, leak_free):
     # Set experiment
     # Set experiment explicitly to Baseline_Zscore
     experiment_name = "Baseline_Zscore"
+    mlflow.set_experiment(experiment_name)
     
     # Start MLflow run
     run_name = f"{dataset_name}_{band_name.upper()}_Baseline_{'leakfree' if leak_free else 'leaky'}"
