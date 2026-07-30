@@ -17,15 +17,23 @@ if __name__ == "__main__":
     # Force the local file store to avoid any lingering SQLite configs or Google Drive locking errors
     local_mlruns = os.path.join(os.getcwd(), "mlruns")
     
-    # Automatically sweep and destroy any Google Drive desktop.ini files before booting
-    if os.path.exists(local_mlruns):
-        for root, dirs, files in os.walk(local_mlruns):
-            for file in files:
-                if file.lower() == "desktop.ini":
-                    try:
-                        os.remove(os.path.join(root, file))
-                    except:
-                        pass
+    # Automatically sweep and destroy any Google Drive desktop.ini files
+    def desktop_ini_scrubber():
+        import time
+        while True:
+            if os.path.exists(local_mlruns):
+                for root, dirs, files in os.walk(local_mlruns):
+                    for file in files:
+                        if file.lower() == "desktop.ini":
+                            try:
+                                os.remove(os.path.join(root, file))
+                            except:
+                                pass
+            time.sleep(5)
+            
+    import threading
+    scrubber_thread = threading.Thread(target=desktop_ini_scrubber, daemon=True)
+    scrubber_thread.start()
                         
     sys.argv = ["mlflow", "ui", "--backend-store-uri", f"file:///{local_mlruns.replace(os.sep, '/')}"]
         
