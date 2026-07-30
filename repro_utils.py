@@ -684,8 +684,8 @@ def log_baseline_to_mlflow(dataset_name, band_name, alpha, leak_free):
     if os.environ.get("MLFLOW_TRACKING_URI"):
         mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
     # Set experiment
-    # Set experiment explicitly to Baseline_Zscore
-    experiment_name = "Baseline_Zscore"
+    # Set experiment explicitly to Simple_Baseline_ZScore
+    experiment_name = "Simple_Baseline_ZScore"
     mlflow.set_experiment(experiment_name)
     
     # Start MLflow run
