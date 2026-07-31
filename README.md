@@ -1,67 +1,78 @@
-# DynaLand
-File base repository of the article "Integrating Unsupervised Machine Intelligence and Anomaly Detection for Spatial-Temporal Dynamics Mapping using Remote Sensing Image Series"
+# Time-Series Final Project: Spatio-Temporal Dynamic Mapping
 
-Anomaly Detection code flow:
+This repository contains the code for reconstructing and improving the methodology proposed in the paper:
+**"Integrating Unsupervised Machine Intelligence and Anomaly Detection for Spatio-Temporal Dynamic Mapping Using Remote Sensing Image Series"** (Sustainability 2023).
 
-1. Select coordinates and build our ImageCollection
-- Sentinel Multispectral Images have 10 meters of spatial resolution and 16 bands.
-- Band selection and Vegetation Indexes apply (NDVI and NDWI)
-- Plot the time variation of the Vegetation Indexes
+## Project Overview
 
-2. Reduce function building and passing band values to Pandas DataFrame
-- Median subtraction to get the best central trend
-- Function to extract pixel values for a Numpy Array
-- Dates (columns) x Lat/Lon (multi index)
+The goal of this project is to map landscape disturbances (such as the Mariana and Brumadinho dam collapses, and intense deforestation in Altamira) using unsupervised machine learning applied to time-series remote sensing data from Google Earth Engine (GEE).
 
-3. Machine Learning Anomaly Detection methods application
-- Anomalies = -1; Regular = 1;
-- At this point, we have to optimize our training dataset. For that, we put a proportional bound ($\alpha$) to the standard deviation of mean, to extract the most likely probable values.
-- Vectorizing the DataFrames values to calculate the mean and standard deviation
-- Input $\alpha$ value to optimize the dataset, returning one regular array:
-    - upper bound = $mean + \alpha*std$
-    - lower bound = $mean - \alpha*std$
-    - array_reg = [lower bound:upper bound]
-- For One-Class SVM, input a $\beta$ value to reduce the array size and optimize processing time of training without lettering.
-- Training Anomaly Detection methods
-- Define our statistic functions:
-    - transitions -> 1 to -1 or -1 to 1 (== changes);
-    - mantem_normal -> 1 to 1;
-    - mantem_anomalia -> -1 to -1;
-    - contador_reg -> count all regular pixels;
-    - contador_anomaly -> count all anomaly pixels;
-    - p_valor -> calculate the p-value of changes;
-- Define the function <strong>OCSVM</strong> to map in DataDrame
-- For each parameter of anomaly methods, run the for loop to create its DataFrame
-- Build a DataFrame of anomalies in period of interest
-- Save Tiff from DataFrame
+### Methodology
+1. **Paper Reconstruction (Stage 1):** We implemented the Isolation Forest (IF) and One-Class Support Vector Machine (OC-SVM) models to detect temporal anomalies.
+2. **Simple Baseline:** We implemented a classical Z-Score thresholding model to serve as a naive statistical baseline.
+3. **Improved Method (Stage 2):** We introduced a Deep Learning approach using an **LSTM Autoencoder**. Unlike the classical methods that evaluate isolated pixel values, the LSTM captures the sequential, temporal relationships of the landscape over time, calculating reconstruction errors to flag structural anomalies.
 
-## File Explanations
+### Technical Specifications
+- **Task Type:** Unsupervised Anomaly Detection (Multivariate input, Univariate output).
+- **Sampling Frequency:** ~16 days (Terra MODIS), ~10-15 days (Landsat/Sentinel).
+- **Input Window Length:** 3 time-steps (used for calculating Time-Aware Features like velocity, acceleration, and rolling stats for the LSTM).
+- **Forecast Horizon:** N/A (Reconstruction-based detection, not future forecasting).
+- **Random Seeds:** Fixed at `42` where possible to ensure reproducibility.
 
-Here is a summary of the key files in this repository:
+---
 
-### Core Analysis Notebooks & Scripts
-These contain the primary exploration and model training logic for the three study regions described in the article:
-- **Altamira (MODIS NDVI)**: [Altamira_Modis_script.ipynb](Altamira_Modis_script.ipynb) / [Altamira_Modis_script.py](Altamira_Modis_script.py)
-- **Brumadinho (Sentinel-2 NDWI)**: [Brumadinho_Sentinel_script.ipynb](Brumadinho_Sentinel_script.ipynb) / [Brumadinho_Sentinel_script.py](Brumadinho_Sentinel_script.py)
-- **Mariana (Landsat-8 GVMI)**: [Mariana_Landsat_script.ipynb](Mariana_Landsat_script.ipynb) / [Mariana_Landsat_script.py](Mariana_Landsat_script.py)
-- **Synthetic Validation**: [V9_Syntethic_Image_Validation.ipynb](V9_Syntethic_Image_Validation.ipynb) / [V9_Syntethic_Image_Validation.py](V9_Syntethic_Image_Validation.py) — Validates the anomaly detection methodology using synthetic time-series images.
+## Environment Requirements
+Ensure you have Python 3.8+ installed. 
 
-### Reproducibility Pipelines
-These scripts allow you to run the pipelines systematically and log results using MLflow:
-- [run_preprocessing.py](run_preprocessing.py): Runs baseline data ingestion, cloud filtering, median-centering, and envelope selection for all three regions.
-- [Altamira_Modis_repro.py](Altamira_Modis_repro.py), [Brumadinho_Sentinel_repro.py](Brumadinho_Sentinel_repro.py), [Mariana_Landsat_repro.py](Mariana_Landsat_repro.py): Scripts to run parameter sweeps (e.g., number of estimators for Isolation Forest, $\nu$ for One-Class SVM) under both `leak_free=True` and `leak_free=False` settings, logging results to MLflow.
+Install the required packages using the provided `requirements.txt`:
+```bash
+pip install -r requirements.txt
+```
 
-### Histogram Analysis
-Notebooks and generated scripts for visualizing frequency distributions of remote sensing indices and calculating statistical thresholds:
-- **Altamira**: [histograma_altamira-V2.ipynb](histograma_altamira-V2.ipynb) / [histograma_altamira-V2.py](histograma_altamira-V2.py)
-- **Brumadinho**: [histograma_brumadinho_V2.ipynb](histograma_brumadinho_V2.ipynb) / [histograma_brumadinho_V2.py](histograma_brumadinho_V2.py)
-- **Mariana**: [histograma_Mariana_V2.ipynb](histograma_Mariana_V2.ipynb) / [histograma_Mariana_V2.py](histograma_Mariana_V2.py)
+You must also authenticate your Google Earth Engine account before running the pipelines:
+```bash
+earthengine authenticate
+```
 
-### Shared Modules & Configuration
-- [repro_utils.py](repro_utils.py): Core helper functions for loading datasets, preprocessing time series, calculating metrics, wrapping models, logging to MLflow, and exporting results.
-- [requirements.txt](requirements.txt): Environment dependencies.
+---
 
-### Datasets, Reference PDF, and Outputs
-- `data_Altamira_ndvi.parquet` & `data_Altamira_SummaryQA.parquet`: Cached Parquet datasets representing NDVI and QA information for the Altamira MODIS analysis.
-- [sustainability-15-04725.pdf](sustainability-15-04725.pdf): The original research paper describing the methodology and results.
-- `Tiff/`: Directory containing output GeoTIFF files generated from the anomaly detection models for visualization in GIS software.
+## Execution Guide
+
+### 1. Launch MLflow Dashboard
+All experiments, parameters, and generated TIFFs are tracked automatically using MLflow. To start the local server (which includes a background daemon to prevent `desktop.ini` Google Drive syncing crashes):
+```bash
+python run_mlflow.py
+```
+*Access the dashboard at: http://localhost:5000*
+
+### 2. Preprocess Data
+Download and preprocess the GEE data (removes clouds/shadows, calculates spectral indices, and centers the median trend):
+```bash
+python run_preprocessing.py
+```
+
+### 3. Run Reconstructions & Baseline
+Run the classical anomaly detection algorithms (IF, OC-SVM) for each dataset:
+```bash
+python Altamira_MODIS_repro.py
+python Brumadinho_Sentinel_repro.py
+python Mariana_Landsat_repro.py
+```
+Run the Simple Baseline (Z-Score) across all datasets:
+```bash
+python run_baseline_all.py
+```
+
+### 4. Run Improved Method (LSTM Autoencoder)
+Train the deep learning model to learn the structural sequences of the environment:
+```bash
+python train_deep.py
+```
+Once trained, run the inference script to calculate reconstruction errors and map the anomalies:
+```bash
+python inference_deep.py
+```
+
+## Expected Outputs
+- **MLflow Database:** All models will log their `total_anomalies`, `total_transitions`, and hyperparameters directly to the MLflow UI.
+- **GeoTIFFs:** Georeferenced `.tif` anomaly maps will be saved in the `Tiff/` directory, categorized by algorithm and leak-free status.
