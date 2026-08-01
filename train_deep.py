@@ -139,6 +139,15 @@ def train_lstm_autoencoder(dataset_name='Altamira', index_name='NDVI', batch_siz
                 mlflow.log_metric("execution_time_seconds", exec_time)
                 mlflow.log_metric("anomaly_threshold", anomaly_threshold)
                 
+                # Log custom unsupervised metrics (SCP, SFR, TPR, Cluster Size, Entropy)
+                custom_m = repro_utils.compute_summary_unsupervised_metrics(df_pred)
+                mlflow.log_metric("flicker_ratio_sfr", custom_m['flicker_ratio_sfr'])
+                mlflow.log_metric("temporal_persistence_tpr", custom_m['temporal_persistence_tpr'])
+                mlflow.log_metric("spatial_coherence_scp", custom_m['spatial_coherence_scp'])
+                mlflow.log_metric("avg_cluster_size", custom_m['avg_cluster_size'])
+                mlflow.log_metric("temporal_entropy_h", custom_m['temporal_entropy_h'])
+
+                
                 # 3. Save GeoTIFF Artifact
                 tiff_dir = f"Tiff/deep_learning/{dataset_name}_{index_name}"
                 os.makedirs(tiff_dir, exist_ok=True)

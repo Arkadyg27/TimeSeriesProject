@@ -29,6 +29,23 @@ if __name__ == "__main__":
                                 os.remove(os.path.join(root, file))
                             except:
                                 pass
+                        elif file.lower() == "meta.yaml" and root != local_mlruns:
+                            try:
+                                meta_path = os.path.join(root, file)
+                                with open(meta_path, 'r', encoding='utf-8') as f_meta:
+                                    lines = f_meta.read().splitlines()
+                                run_id = None
+                                has_run_uuid = False
+                                for line in lines:
+                                    if line.startswith("run_id:"):
+                                        run_id = line.split(":", 1)[1].strip().strip("'").strip('"')
+                                    if line.startswith("run_uuid:"):
+                                        has_run_uuid = True
+                                if run_id and not has_run_uuid:
+                                    with open(meta_path, 'a', encoding='utf-8') as f_meta:
+                                        f_meta.write(f"\nrun_uuid: '{run_id}'\n")
+                            except:
+                                pass
             time.sleep(5)
             
     import threading

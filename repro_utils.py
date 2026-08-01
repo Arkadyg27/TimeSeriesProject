@@ -666,6 +666,14 @@ def log_experiment_to_mlflow(dataset_name, band_name, alpha, beta, model_type, m
         mlflow.log_metric("std_transitions", std_transitions)
         mlflow.log_metric("execution_time_seconds", exec_time)
         
+        # Log custom unsupervised metrics (SCP, SFR, TPR, Cluster Size, Entropy)
+        custom_m = compute_summary_unsupervised_metrics(df_pred)
+        mlflow.log_metric("flicker_ratio_sfr", custom_m['flicker_ratio_sfr'])
+        mlflow.log_metric("temporal_persistence_tpr", custom_m['temporal_persistence_tpr'])
+        mlflow.log_metric("spatial_coherence_scp", custom_m['spatial_coherence_scp'])
+        mlflow.log_metric("avg_cluster_size", custom_m['avg_cluster_size'])
+        mlflow.log_metric("temporal_entropy_h", custom_m['temporal_entropy_h'])
+        
         # Save output TIFF
         tiff_dir = f"Tiff/{'leak_free' if leak_free else 'leaky'}/{model_type}"
         tiff_filename = f"{dataset_name}_{band_name.upper()}_{run_name}.tif"
@@ -676,7 +684,7 @@ def log_experiment_to_mlflow(dataset_name, band_name, alpha, beta, model_type, m
         # Log artifact
         mlflow.log_artifact(tiff_path)
         
-        print(f"Logged run {run_name} to MLflow. Anomalies: {total_anomalies}, Transitions: {total_transitions}, Execution time: {exec_time:.2f}s")
+        print(f"Logged run {run_name} to MLflow. Anomalies: {total_anomalies}, Transitions: {total_transitions}, SCP: {custom_m['spatial_coherence_scp']:.4f}, Execution time: {exec_time:.2f}s")
         return df_metrics
 
 def log_baseline_to_mlflow(dataset_name, band_name, alpha, leak_free):
@@ -738,6 +746,14 @@ def log_baseline_to_mlflow(dataset_name, band_name, alpha, leak_free):
         mlflow.log_metric("std_transitions", std_transitions)
         mlflow.log_metric("execution_time_seconds", exec_time)
         
+        # Log custom unsupervised metrics
+        custom_m = compute_summary_unsupervised_metrics(df_pred)
+        mlflow.log_metric("flicker_ratio_sfr", custom_m['flicker_ratio_sfr'])
+        mlflow.log_metric("temporal_persistence_tpr", custom_m['temporal_persistence_tpr'])
+        mlflow.log_metric("spatial_coherence_scp", custom_m['spatial_coherence_scp'])
+        mlflow.log_metric("avg_cluster_size", custom_m['avg_cluster_size'])
+        mlflow.log_metric("temporal_entropy_h", custom_m['temporal_entropy_h'])
+        
         # Save output TIFF
         os.makedirs(tiff_dir, exist_ok=True)
         save_tiff_fromdf(df_metrics, ['Anomalias', 'p-valor'], -99999, tiff_path)
@@ -745,8 +761,70 @@ def log_baseline_to_mlflow(dataset_name, band_name, alpha, leak_free):
         # Log artifact
         mlflow.log_artifact(tiff_path)
         
-        print(f"Logged run {run_name} to MLflow. Anomalies: {total_anomalies}, Transitions: {total_transitions}, Execution time: {exec_time:.2f}s")
+        print(f"Logged run {run_name} to MLflow. Anomalies: {total_anomalies}, Transitions: {total_transitions}, SCP: {custom_m['spatial_coherence_scp']:.4f}, Execution time: {exec_time:.2f}s")
         return df_metrics
+
+def compute_summary_unsupervised_metrics(df_pred):
+    from scipy.ndimage import label
+    arr = df_pred.values
+    N_pixels, N_dates = arr.shape
+    
+    is_anomaly = (arr == -1)
+    total_anomalies = int(np.sum(is_anomaly))
+    
+    if total_anomalies == 0:
+        return {'flicker_ratio_sfr': 0.0, 'temporal_persistence_tpr': 0.0, 'spatial_coherence_scp': 0.0, 'avg_cluster_size': 0.0, 'temporal_entropy_h': 0.0}
+        
+    persistent_anomalies = np.sum(is_anomaly[:, :-1] & is_anomaly[:, 1:])
+    tpr = float(persistent_anomalies / total_anomalies) if total_anomalies > 0 else 0.0
+    
+    arr_t = arr[:, 1:]
+    arr_t_minus_1 = arr[:, :-1]
+    total_transitions = np.sum((arr_t + arr_t_minus_1) == 0)
+    sfr = float(total_transitions / total_anomalies) if total_anomalies > 0 else 0.0
+    
+    scp = float(np.mean(arr[1:, :] == arr[:-1, :]))
+    
+    p = np.mean(is_anomaly, axis=1)
+    p_clipped = np.clip(p, 1e-7, 1 - 1e-7)
+    h_pixel = -p_clipped * np.log2(p_clipped) - (1 - p_clipped) * np.log2(1 - p_clipped)
+    entropy_h = float(np.mean(h_pixel))
+    
+    try:
+        lat = [idx[0] for idx in df_pred.index]
+        lon = [idx[1] for idx in df_pred.index]
+        ulat = np.unique(lat)
+        ulon = np.unique(lon)
+        ncols = len(ulon)
+        nrows = len(ulat)
+        
+        ys = ulat[1] - ulat[0] if len(ulat) > 1 else (ulat[11] - ulat[10] if len(ulat) > 11 else 0.002)
+        xs = ulon[1] - ulon[0] if len(ulon) > 1 else (ulon[11] - ulon[10] if len(ulon) > 11 else 0.002)
+        refLat = np.max(ulat)
+        refLon = np.min(ulon)
+        
+        anom_map_2d = np.zeros((nrows, ncols), dtype=bool)
+        anom_counts = np.sum(is_anomaly, axis=1)
+        
+        for j in range(len(df_pred)):
+            if anom_counts[j] > 0:
+                posLin = np.clip(np.int64(np.round((refLat - lat[j]) / abs(ys))), 0, nrows - 1)
+                posCol = np.clip(np.int64(np.round((lon[j] - refLon) / abs(xs))), 0, ncols - 1)
+                anom_map_2d[posLin, posCol] = True
+                
+        labeled_array, num_features = label(anom_map_2d)
+        avg_cluster = float(np.sum(anom_map_2d) / num_features) if num_features > 0 else 0.0
+    except Exception:
+        avg_cluster = 0.0
+        
+    return {
+        'flicker_ratio_sfr': float(sfr),
+        'temporal_persistence_tpr': float(tpr),
+        'spatial_coherence_scp': float(scp),
+        'avg_cluster_size': float(avg_cluster),
+        'temporal_entropy_h': float(entropy_h)
+    }
+
 
 def run_and_log_preprocessing(dataset_name, band_name, alpha=0.5):
     # Set experiment
