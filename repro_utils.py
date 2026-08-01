@@ -818,12 +818,16 @@ def compute_summary_unsupervised_metrics(df_pred):
         avg_cluster = 0.0
         
     return {
+        'total_anomalies': int(total_anomalies),
+        'total_regular': int(np.sum(~is_anomaly)),
         'flicker_ratio_sfr': float(sfr),
         'temporal_persistence_tpr': float(tpr),
         'spatial_coherence_scp': float(scp),
         'avg_cluster_size': float(avg_cluster),
         'temporal_entropy_h': float(entropy_h)
     }
+
+
 
 
 def run_and_log_preprocessing(dataset_name, band_name, alpha=0.5):

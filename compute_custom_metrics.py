@@ -1,60 +1,127 @@
 import os
+import time
 import numpy as np
 import pandas as pd
 import torch
+import mlflow
 from torch.utils.data import TensorDataset, DataLoader
 import repro_utils
 import feature_engineering as fe
 from models_deep import LSTMAutoencoder
 
-def compute_custom_unsupervised_metrics(df_pred):
+EVENT_DATES = {
+    'Altamira': '2016-01-01',
+    'Brumadinho': '2019-01-25',
+    'Mariana': '2015-11-05'
+}
+
+def compute_full_unsupervised_metrics_suite(df_pred, exec_time, dataset_name):
     """
-    Computes custom unsupervised metrics for temporal-spatial time series anomaly detection:
-    1. Temporal Persistence Ratio (TPR): Fraction of anomalies that persist for >= 2 consecutive dates
-    2. Spurious Flicker Ratio (SFR): Ratio of state transitions (Mudancas) to total anomaly count
-    3. Spatial Coherence Proxy (SCP): Measure of spatial neighbor agreement
+    Computes and logs the complete suite of unsupervised spatial-temporal metrics:
+    1. Spatial Coherence Index (SCP)
+    2. Spurious Flicker Ratio (SFR)
+    3. Temporal Persistence Ratio (TPR)
+    4. Average Spatial Cluster Size (S_cluster)
+    5. Temporal Prediction Entropy (Entropy H)
+    6. Disaster Event Contrast Ratio (CNR)
+    7. Execution Time & Inference Speed (ms/sample)
     """
-    arr = df_pred.values # shape: (N_pixels, N_dates)
+    arr = df_pred.values # (N_pixels, N_dates)
     N_pixels, N_dates = arr.shape
     
-    # Identify anomaly positions (-1)
     is_anomaly = (arr == -1)
-    total_anomalies = np.sum(is_anomaly)
+    total_anomalies = int(np.sum(is_anomaly))
     
     if total_anomalies == 0:
-        return {'TPR': 0.0, 'SFR': 0.0, 'SCP': 0.0, 'Total_Anomalies': 0}
+        return {
+            'spatial_coherence_scp': 0.0,
+            'flicker_ratio_sfr': 0.0,
+            'temporal_persistence_tpr': 0.0,
+            'avg_cluster_size': 0.0,
+            'temporal_entropy_h': 0.0,
+            'disaster_contrast_cnr': 1.0,
+            'execution_time_seconds': float(exec_time),
+            'inference_speed_ms_per_pixel': float((exec_time * 1000) / N_pixels)
+        }
         
     # 1. Temporal Persistence Ratio (TPR)
-    # Check if anomaly at t is also anomaly at t+1
     persistent_anomalies = np.sum(is_anomaly[:, :-1] & is_anomaly[:, 1:])
-    tpr = persistent_anomalies / total_anomalies
+    tpr = float(persistent_anomalies / total_anomalies) if total_anomalies > 0 else 0.0
     
     # 2. Spurious Flicker Ratio (SFR)
     arr_t = arr[:, 1:]
     arr_t_minus_1 = arr[:, :-1]
     total_transitions = np.sum((arr_t + arr_t_minus_1) == 0)
-    sfr = total_transitions / total_anomalies
+    sfr = float(total_transitions / total_anomalies) if total_anomalies > 0 else 0.0
     
-    # 3. Spatial Coherence Proxy (SCP)
-    # Calculate agreement between neighboring pixels in index order
-    # (Pixels close in dataframe index are geographically adjacent)
-    spatial_diff = np.mean(arr[1:, :] == arr[:-1, :])
-    scp = float(spatial_diff)
+    # 3. Spatial Coherence Index (SCP)
+    scp = float(np.mean(arr[1:, :] == arr[:-1, :]))
+    
+    # 4. Temporal Prediction Entropy (H)
+    p = np.mean(is_anomaly, axis=1)
+    p_clipped = np.clip(p, 1e-7, 1 - 1e-7)
+    h_pixel = -p_clipped * np.log2(p_clipped) - (1 - p_clipped) * np.log2(1 - p_clipped)
+    entropy_h = float(np.mean(h_pixel))
+    
+    # 5. Average Spatial Cluster Size (S_cluster)
+    from scipy.ndimage import label
+    try:
+        lat = [idx[0] for idx in df_pred.index]
+        lon = [idx[1] for idx in df_pred.index]
+        ulat = np.unique(lat)
+        ulon = np.unique(lon)
+        ncols = len(ulon)
+        nrows = len(ulat)
+        
+        ys = ulat[1] - ulat[0] if len(ulat) > 1 else (ulat[11] - ulat[10] if len(ulat) > 11 else 0.002)
+        xs = ulon[1] - ulon[0] if len(ulon) > 1 else (ulon[11] - ulon[10] if len(ulon) > 11 else 0.002)
+        refLat = np.max(ulat)
+        refLon = np.min(ulon)
+        
+        anom_map_2d = np.zeros((nrows, ncols), dtype=bool)
+        anom_counts = np.sum(is_anomaly, axis=1)
+        
+        for j in range(len(df_pred)):
+            if anom_counts[j] > 0:
+                posLin = np.clip(np.int64(np.round((refLat - lat[j]) / abs(ys))), 0, nrows - 1)
+                posCol = np.clip(np.int64(np.round((lon[j] - refLon) / abs(xs))), 0, ncols - 1)
+                anom_map_2d[posLin, posCol] = True
+                
+        labeled_array, num_features = label(anom_map_2d)
+        avg_cluster = float(np.sum(anom_map_2d) / num_features) if num_features > 0 else 0.0
+    except Exception:
+        avg_cluster = 0.0
+        
+    # 6. Disaster Event Contrast Ratio (CNR)
+    event_date = EVENT_DATES.get(dataset_name, '2019-01-01')
+    event_mask = np.array([str(col) >= event_date for col in df_pred.columns])
+    
+    if np.sum(event_mask) > 0 and np.sum(~event_mask) > 0:
+        event_anomaly_density = np.mean(is_anomaly[:, event_mask])
+        baseline_anomaly_density = np.mean(is_anomaly[:, ~event_mask])
+        cnr = float(event_anomaly_density / (baseline_anomaly_density + 1e-6))
+    else:
+        cnr = 1.0
+        
+    # 7. Execution Time & Inference Speed
+    speed_ms_per_pixel = float((exec_time * 1000) / N_pixels)
     
     return {
-        'Total_Anomalies': int(total_anomalies),
-        'Total_Transitions': int(total_transitions),
-        'TPR': float(tpr),
-        'SFR': float(sfr),
-        'SCP': float(scp)
+        'total_anomalies': int(total_anomalies),
+        'total_regular': int(np.sum(~is_anomaly)),
+        'spatial_coherence_scp': float(scp),
+        'flicker_ratio_sfr': float(sfr),
+        'temporal_persistence_tpr': float(tpr),
+        'avg_cluster_size': float(avg_cluster),
+        'temporal_entropy_h': float(entropy_h),
+        'disaster_contrast_cnr': float(cnr),
+        'execution_time_seconds': float(exec_time),
+        'inference_speed_ms_per_pixel': float(speed_ms_per_pixel)
     }
 
-def main():
-    print("=== COMPUTING CUSTOM UNSUPERVISED METRICS FOR ALTAMIRA NDVI ===")
-    dataset_name = 'Altamira'
-    band_name = 'ndvi'
-    
-    # Load raw data
+
+def evaluate_dataset(dataset_name, band_name):
+    print(f"\n==================== EVALUATING DATASET: {dataset_name} ({band_name.upper()}) ====================")
     df_raw = repro_utils.load_raw_data(dataset_name, band_name)
     if dataset_name == 'Altamira':
         qa_df = pd.read_parquet("data_Altamira_SummaryQA.parquet")
@@ -63,26 +130,46 @@ def main():
         
     centered_vals = repro_utils.get_centered_data(df_raw, dataset_name, band_name, leak_free=True)
     
+    # Setup MLflow Experiment
+    os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
+    mlflow.set_experiment(f"Unsupervised_Full_Suite_{dataset_name}")
+    
+    results = []
+    
     # 1. Z-Score Baseline
-    print("\n1. Evaluating Z-Score Baseline...")
-    df_pred_base, _, _ = repro_utils.run_baseline_pipeline(df_raw, centered_vals, alpha=1.0, leak_free=True)
-    metrics_base = compute_custom_unsupervised_metrics(df_pred_base)
+    print("1. Evaluating Z-Score Baseline...")
+    t0 = time.time()
+    df_pred_base, _, exec_time_base = repro_utils.run_baseline_pipeline(df_raw, centered_vals, alpha=1.0, leak_free=True)
+    m_base = compute_full_unsupervised_metrics_suite(df_pred_base, exec_time_base, dataset_name)
+    
+    with mlflow.start_run(run_name=f"{dataset_name}_ZScore_Baseline"):
+        mlflow.log_params({"dataset": dataset_name, "band": band_name, "model": "Z-Score Baseline"})
+        mlflow.log_metrics(m_base)
+        
+    results.append({'Dataset': dataset_name, 'Model': 'Z-Score Baseline', 'SCP': f"{m_base['spatial_coherence_scp']:.4f}", 'SFR': f"{m_base['flicker_ratio_sfr']:.4f}", 'TPR': f"{m_base['temporal_persistence_tpr']:.4f}", 'Cluster Size': f"{m_base['avg_cluster_size']:.2f}", 'Entropy H': f"{m_base['temporal_entropy_h']:.4f}", 'CNR Event': f"{m_base['disaster_contrast_cnr']:.2f}x", 'Exec Time (s)': f"{m_base['execution_time_seconds']:.1f}s", 'Speed (ms/px)': f"{m_base['inference_speed_ms_per_pixel']:.3f}ms"})
     
     # 2. Isolation Forest (leak_free=True)
-    print("\n2. Evaluating Isolation Forest (leak_free=True, n_est=40)...")
-    df_pred_if, _, _ = repro_utils.run_experiment_pipeline(
+    print("2. Evaluating Isolation Forest (leak_free=True)...")
+    df_pred_if, _, exec_time_if = repro_utils.run_experiment_pipeline(
         df_raw, centered_vals, alpha=1.0, beta=None, model_type='IsolationForest',
         model_params={'n_estimators': 40}, leak_free=True
     )
-    metrics_if = compute_custom_unsupervised_metrics(df_pred_if)
+    m_if = compute_full_unsupervised_metrics_suite(df_pred_if, exec_time_if, dataset_name)
     
+    with mlflow.start_run(run_name=f"{dataset_name}_Isolation_Forest"):
+        mlflow.log_params({"dataset": dataset_name, "band": band_name, "model": "Isolation Forest", "n_estimators": 40})
+        mlflow.log_metrics(m_if)
+        
+    results.append({'Dataset': dataset_name, 'Model': 'Isolation Forest', 'SCP': f"{m_if['spatial_coherence_scp']:.4f}", 'SFR': f"{m_if['flicker_ratio_sfr']:.4f}", 'TPR': f"{m_if['temporal_persistence_tpr']:.4f}", 'Cluster Size': f"{m_if['avg_cluster_size']:.2f}", 'Entropy H': f"{m_if['temporal_entropy_h']:.4f}", 'CNR Event': f"{m_if['disaster_contrast_cnr']:.2f}x", 'Exec Time (s)': f"{m_if['execution_time_seconds']:.1f}s", 'Speed (ms/px)': f"{m_if['inference_speed_ms_per_pixel']:.3f}ms"})
+
     # 3. LSTM Autoencoder
-    print("\n3. Evaluating LSTM Autoencoder...")
+    print("3. Evaluating LSTM Autoencoder...")
     matrix_path = f"Preprocess/{dataset_name}_{band_name.upper()}_CenteredMatrix.parquet"
     if not os.path.exists(matrix_path):
         repro_utils.run_and_log_preprocessing(dataset_name, band_name)
     df_mat = pd.read_parquet(matrix_path).replace(-99999, np.nan)
     
+    t0_lstm = time.time()
     feature_tensor = fe.build_time_aware_features(df_mat.values, window_size=3)
     feature_tensor = np.nan_to_num(feature_tensor, nan=0.0)
     
@@ -90,7 +177,6 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = LSTMAutoencoder(num_features=5, hidden_dim=64, num_layers=2).to(device)
     
-    # Evaluate reconstruction
     model.eval()
     dataloader = DataLoader(TensorDataset(x_tensor), batch_size=512, shuffle=False)
     reconstructed = []
@@ -104,18 +190,38 @@ def main():
     threshold = np.percentile(mse_errors, 95)
     anomalies_mask = np.where(mse_errors > threshold, -1, 1)
     df_pred_lstm = pd.DataFrame(anomalies_mask, index=df_raw.index, columns=df_raw.columns)
+    exec_time_lstm = time.time() - t0_lstm
     
-    metrics_lstm = compute_custom_unsupervised_metrics(df_pred_lstm)
+    m_lstm = compute_full_unsupervised_metrics_suite(df_pred_lstm, exec_time_lstm, dataset_name)
     
-    print("\n=========================================================================")
-    print("           CUSTOM UNSUPERVISED METRICS COMPARISON TABLE                  ")
-    print("=========================================================================")
-    print(f"{'Model':<25} | {'Total Anom':<12} | {'Flicker Ratio (SFR)':<20} | {'Persistence (TPR)':<18} | {'Spatial Coherence (SCP)'}")
-    print("-" * 95)
-    print(f"{'Z-Score Baseline':<25} | {metrics_base['Total_Anomalies']:<12} | {metrics_base['SFR']:<20.4f} | {metrics_base['TPR']:<18.4f} | {metrics_base['SCP']:.4f}")
-    print(f"{'Isolation Forest':<25} | {metrics_if['Total_Anomalies']:<12} | {metrics_if['SFR']:<20.4f} | {metrics_if['TPR']:<18.4f} | {metrics_if['SCP']:.4f}")
-    print(f"{'LSTM Autoencoder (Ours)':<25} | {metrics_lstm['Total_Anomalies']:<12} | {metrics_lstm['SFR']:<20.4f} | {metrics_lstm['TPR']:<18.4f} | {metrics_lstm['SCP']:.4f}")
-    print("=========================================================================")
+    with mlflow.start_run(run_name=f"{dataset_name}_LSTM_Autoencoder"):
+        mlflow.log_params({"dataset": dataset_name, "band": band_name, "model": "LSTM Autoencoder"})
+        mlflow.log_metrics(m_lstm)
+        
+    results.append({'Dataset': dataset_name, 'Model': 'LSTM Autoencoder (Ours)', 'SCP': f"{m_lstm['spatial_coherence_scp']:.4f}", 'SFR': f"{m_lstm['flicker_ratio_sfr']:.4f}", 'TPR': f"{m_lstm['temporal_persistence_tpr']:.4f}", 'Cluster Size': f"{m_lstm['avg_cluster_size']:.2f}", 'Entropy H': f"{m_lstm['temporal_entropy_h']:.4f}", 'CNR Event': f"{m_lstm['disaster_contrast_cnr']:.2f}x", 'Exec Time (s)': f"{m_lstm['execution_time_seconds']:.1f}s", 'Speed (ms/px)': f"{m_lstm['inference_speed_ms_per_pixel']:.3f}ms"})
+
+    return results
+
+def main():
+    print("=== LOGGING FULL UNSUPERVISED METRICS SUITE TO MLFLOW ACROSS ALL DATASETS ===")
+    datasets = [
+        {'name': 'Altamira', 'band': 'ndvi'},
+        {'name': 'Brumadinho', 'band': 'ndwi'},
+        {'name': 'Mariana', 'band': 'gvmi'}
+    ]
+    
+    all_results = []
+    for item in datasets:
+        res = evaluate_dataset(item['name'], item['band'])
+        all_results.extend(res)
+        
+    df_res = pd.DataFrame(all_results)
+    
+    print("\n=====================================================================================================================================================")
+    print("                                                 COMPLETE UNSUPERVISED METRICS SUITE TABLE                                                          ")
+    print("=====================================================================================================================================================")
+    print(df_res.to_string(index=False))
+    print("=====================================================================================================================================================")
 
 if __name__ == '__main__':
     main()
