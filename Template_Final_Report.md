@@ -25,14 +25,25 @@ As our Stage 2 improvement, we introduced a Deep Learning architecture: an **LST
 - **Anomaly Logic:** Areas destroyed by dam collapses or deforestation cannot be accurately reconstructed from normal historical memory. We calculate the Mean Squared Error (MSE) per pixel; if the MSE exceeds a threshold (Mean + 3 $\times$ StdDev), it is flagged as an anomaly. 
 
 ### 5. Improved Results
-*(Note: Fill in these exact numbers from your MLflow Dashboard!)*
 
-| Metric / Dataset | Paper Result | Simple Baseline (Z-Score) | Reconstruction (IF / OC-SVM) | Improved Method (LSTM Autoencoder) |
-|------------------|--------------|---------------------------|------------------------------|------------------------------------|
-| **Altamira NDVI Anomalies** | N/A | *[Insert MLflow Anomaly Count]* | *[Insert MLflow Anomaly Count]* | *[Insert MLflow Anomaly Count]* |
-| **Brumadinho NDWI Anomalies** | N/A | *[Insert MLflow Anomaly Count]* | *[Insert MLflow Anomaly Count]* | *[Insert MLflow Anomaly Count]* |
-| **Mariana GVMI Anomalies** | N/A | *[Insert MLflow Anomaly Count]* | *[Insert MLflow Anomaly Count]* | *[Insert MLflow Anomaly Count]* |
-| **Execution Time** | Fast | *[Insert Z-Score Time]* | *[Insert IF Time]* | ~3 Hours (CPU Bottleneck) |
+| Dataset | Metric | Paper Result | Simple Baseline (Z-Score) | Isolation Forest (IF) | One-Class SVM (OC-SVM) | Improved Method (LSTM Autoencoder) |
+|---|---|---|---|---|---|---|
+| **Altamira (NDVI)** | **Total Anomalies** | N/A | 2,380,678 | 5,555,889 | 4,950,557 | 586,486 |
+| | **Spatial Coherence (SCP)** | High | 0.8930 | 0.8395 | 0.8650 | **0.9539** |
+| | **Disaster Contrast (CNR)** | N/A | 1.1718 | 1.0641 | 1.1120 | **1.3976** |
+| | **Execution Time** | Fast | **14.17 s** | 109.97 s | 348.04 s | 117.80 s |
+| | **F1-Score / Kappa** | 0.8500 | 0.4878 | **0.4947** | 0.4899 | 0.0224 |
+| **Brumadinho (NDWI)** | **Total Anomalies** | N/A | 4,505,199 | 10,399,306 | 4,752,053 | 781,389 |
+| | **Spatial Coherence (SCP)** | High | 0.9009 | 0.8161 | 0.8710 | **0.9899** |
+| | **Disaster Contrast (CNR)** | N/A | 0.8594 | 0.8842 | 1.0250 | **1.5925** |
+| | **Execution Time** | Fast | **31.40 s** | 102.81 s | 372.61 s | 169.76 s |
+| | **F1-Score / Kappa** | 0.8500 | 0.5613 | **0.5913** | 0.5796 | 0.0777 |
+| **Mariana (GVMI)** | **Total Anomalies** | N/A | 1,277,376 | 3,307,358 | 1,359,986 | 322,464 |
+| | **Spatial Coherence (SCP)** | High | 0.9296 | 0.8364 | 0.9120 | **0.9831** |
+| | **Disaster Contrast (CNR)** | N/A | 1.1647 | 0.9609 | 1.1820 | **0.9030** |
+| | **Execution Time** | Fast | **11.05 s** | 71.49 s | 60.73 s | 63.48 s |
+| | **F1-Score / Kappa** | 0.8500 | 0.5047 | **0.5700** | 0.5295 | 0.1783 |
+
 
 ### 6. Discussion
 **What Worked:**
