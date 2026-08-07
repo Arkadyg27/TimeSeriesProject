@@ -1,16 +1,38 @@
 import repro_utils
 
 def main():
-    print("Starting Baseline Experiments for all datasets...")
+    import argparse
+    parser = argparse.ArgumentParser(description="Run Baseline Experiments")
+    parser.add_argument('--suite', type=str, default='script', choices=['script', 'paper_text', 'all'],
+                        help="Suite to run: 'script' (DynaLand), 'paper_text' (literal paper text), or 'all'")
+    args = parser.parse_args()
 
-    # Define the datasets and their respective bands and envelope multiplier (alpha)
-    datasets = [
-        {'dataset': 'Altamira', 'band': 'ndvi', 'alpha': 1.0},
-        {'dataset': 'Brumadinho', 'band': 'ndvi', 'alpha': 1.0},
-        {'dataset': 'Brumadinho', 'band': 'ndwi', 'alpha': 1.0}, 
-        {'dataset': 'Mariana', 'band': 'gvmi', 'alpha': 1.0},
-        {'dataset': 'Mariana', 'band': 'ndwi', 'alpha': 1.0}
-    ]
+    print(f"Starting Baseline Experiments (Suite: {args.suite.upper()})...")
+
+    if args.suite == 'paper_text':
+        datasets = [
+            {'dataset': 'Altamira', 'band': 'ndvi', 'alpha': 1.0},
+            {'dataset': 'Brumadinho_Landsat', 'band': 'ndvi', 'alpha': 1.0},
+            {'dataset': 'Mariana_Sentinel', 'band': 'ndwi', 'alpha': 1.0}
+        ]
+    elif args.suite == 'script':
+        datasets = [
+            {'dataset': 'Altamira', 'band': 'ndvi', 'alpha': 1.0},
+            {'dataset': 'Brumadinho', 'band': 'ndvi', 'alpha': 1.0},
+            {'dataset': 'Brumadinho', 'band': 'ndwi', 'alpha': 1.0}, 
+            {'dataset': 'Mariana', 'band': 'gvmi', 'alpha': 1.0},
+            {'dataset': 'Mariana', 'band': 'ndwi', 'alpha': 1.0}
+        ]
+    else: # all
+        datasets = [
+            {'dataset': 'Altamira', 'band': 'ndvi', 'alpha': 1.0},
+            {'dataset': 'Brumadinho', 'band': 'ndvi', 'alpha': 1.0},
+            {'dataset': 'Brumadinho', 'band': 'ndwi', 'alpha': 1.0}, 
+            {'dataset': 'Mariana', 'band': 'gvmi', 'alpha': 1.0},
+            {'dataset': 'Mariana', 'band': 'ndwi', 'alpha': 1.0},
+            {'dataset': 'Brumadinho_Landsat', 'band': 'ndvi', 'alpha': 1.0},
+            {'dataset': 'Mariana_Sentinel', 'band': 'ndwi', 'alpha': 1.0}
+        ]
     
     for ds in datasets:
         dataset_name = ds['dataset']
@@ -31,7 +53,7 @@ def main():
                 leak_free=leak_free
             )
 
-    print("\nAll Baseline experiments logged successfully to MLflow!")
+    print(f"\nAll Baseline experiments for {args.suite.upper()} suite logged successfully to MLflow!")
 
 if __name__ == '__main__':
     main()

@@ -7,8 +7,13 @@ import numpy as np
 import pandas as pd
 import ee
 import mlflow
-from osgeo import gdal
-from osgeo import osr
+try:
+    from osgeo import gdal
+    from osgeo import osr
+except ImportError:
+    gdal = None
+    osr = None
+
 from scipy.stats import norm
 
 # Initialize GDAL PROJ database path to avoid projection errors on Windows
@@ -32,7 +37,7 @@ def init_ee():
             ee.Initialize()
 
 def get_dataset_config(dataset_name, band_name):
-    # Configurations for the three paper experiments
+    # Configurations for both Script (DynaLand repo) and Paper-Text datasets
     if dataset_name == 'Altamira':
         geometria = ee.Geometry.Polygon([[
             [-55.3809, -7.5173],
@@ -51,7 +56,8 @@ def get_dataset_config(dataset_name, band_name):
             'filter_fn': lambda img: img,  # We filter df later using SummaryQA
             'band_calc': lambda img: img.expression('NDVI / 10000', {'NDVI': img.select('NDVI')}).rename('ndvi')
         }
-    elif dataset_name == 'Brumadinho':
+    elif dataset_name in ['Brumadinho', 'Brumadinho_Sentinel']:
+        # Sentinel-2 MSI configuration (10m) - Used in author reference script
         geometria = ee.Geometry.Polygon([[
             [-44.13576882693976, -20.14040952973489],
             [-44.107444699742494, -20.14040952973489],
@@ -73,7 +79,31 @@ def get_dataset_config(dataset_name, band_name):
             'filter_fn': lambda col: col.filterMetadata('CLOUD_COVERAGE_ASSESSMENT', 'less_than', 20),
             'band_calc': band_calc
         }
-    elif dataset_name == 'Mariana':
+    elif dataset_name == 'Brumadinho_Landsat':
+        # Landsat-8 OLI configuration (30m) - Described in literal paper text
+        geometria = ee.Geometry.Polygon([[
+            [-44.13576882693976, -20.14040952973489],
+            [-44.107444699742494, -20.14040952973489],
+            [-44.107444699742494, -20.11204199216084],
+            [-44.13576882693976, -20.11204199216084],
+            [-44.13576882693976, -20.14040952973489]
+        ]])
+        if band_name == 'ndvi':
+            band_calc = lambda img: img.expression('(nir - red) / (nir + red)', {'nir': img.select('B5'), 'red': img.select('B4')}).rename('ndvi')
+        else:
+            band_calc = lambda img: img.expression('(nir - green) / (nir + green)', {'nir': img.select('B5'), 'green': img.select('B3')}).rename('ndwi')
+        return {
+            'collection_name': 'LANDSAT/LC08/C02/T1_TOA',
+            'start_date': '2013-01-01',
+            'end_date': '2021-12-31',
+            'scale': 30,
+            'geometry': geometria,
+            'select_bands': ['B5', 'B4', 'B3'],
+            'filter_fn': lambda col: col.filterMetadata('CLOUD_COVER', 'less_than', 20),
+            'band_calc': band_calc
+        }
+    elif dataset_name in ['Mariana', 'Mariana_Landsat']:
+        # Landsat-8 OLI configuration (30m) - Used in author reference script
         geometria = ee.Geometry.Polygon([[
             [-43.49513553785783, -20.24537533206166],
             [-43.42406772779923, -20.24537533206166],
@@ -93,6 +123,29 @@ def get_dataset_config(dataset_name, band_name):
             'geometry': geometria,
             'select_bands': ['B5', 'B7', 'B3'],
             'filter_fn': lambda col: col.filterMetadata('CLOUD_COVER', 'less_than', 20),
+            'band_calc': band_calc
+        }
+    elif dataset_name == 'Mariana_Sentinel':
+        # Sentinel-2 MSI configuration (10m) - Described in literal paper text
+        geometria = ee.Geometry.Polygon([[
+            [-43.49513553785783, -20.24537533206166],
+            [-43.42406772779923, -20.24537533206166],
+            [-43.42406772779923, -20.191089981448055],
+            [-43.49513553785783, -20.191089981448055],
+            [-43.49513553785783, -20.24537533206166]
+        ]])
+        if band_name == 'ndvi':
+            band_calc = lambda img: img.expression('(nir - red) / (nir + red)', {'nir': img.select('B8'), 'red': img.select('B4')}).rename('ndvi')
+        else:
+            band_calc = lambda img: img.expression('(nir - green) / (nir + green)', {'nir': img.select('B8'), 'green': img.select('B3')}).rename('ndwi')
+        return {
+            'collection_name': 'COPERNICUS/S2_HARMONIZED',
+            'start_date': '2016-01-01',
+            'end_date': '2021-12-31',
+            'scale': 10,
+            'geometry': geometria,
+            'select_bands': ['B8', 'B4', 'B3'],
+            'filter_fn': lambda col: col.filterMetadata('CLOUD_COVERAGE_ASSESSMENT', 'less_than', 20),
             'band_calc': band_calc
         }
     else:
@@ -271,6 +324,9 @@ def calculate_metrics(df_pred):
     return metrics_df
 
 def save_tiff_fromdf(df, bands, dummy, path_out):
+    if gdal is None or osr is None:
+        print(f"[INFO] GDAL not available in current Python environment. Skipping GeoTIFF export to {path_out}")
+        return
     os.makedirs(os.path.dirname(path_out), exist_ok=True)
     
     lat = [idx[0] for idx in df.index]

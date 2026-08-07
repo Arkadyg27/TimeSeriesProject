@@ -203,12 +203,40 @@ def evaluate_dataset(dataset_name, band_name):
     return results
 
 def main():
-    print("=== LOGGING FULL UNSUPERVISED METRICS SUITE TO MLFLOW ACROSS ALL DATASETS ===")
-    datasets = [
-        {'name': 'Altamira', 'band': 'ndvi'},
-        {'name': 'Brumadinho', 'band': 'ndwi'},
-        {'name': 'Mariana', 'band': 'gvmi'}
-    ]
+    import argparse
+    parser = argparse.ArgumentParser(description="Compute Full Unsupervised Metrics Suite")
+    parser.add_argument('--suite', type=str, default='script', choices=['script', 'paper_text', 'all'],
+                        help="Dataset suite to evaluate: 'script' (DynaLand), 'paper_text' (literal paper text), or 'all'")
+    args = parser.parse_args()
+
+    print(f"=== LOGGING FULL UNSUPERVISED METRICS SUITE TO MLFLOW (SUITE: {args.suite.upper()}) ===")
+    
+    if args.suite == 'paper_text':
+        datasets = [
+            {'name': 'Altamira', 'band': 'ndvi'},
+            {'name': 'Brumadinho_Landsat', 'band': 'ndvi'},
+            {'name': 'Mariana_Sentinel', 'band': 'ndwi'}
+        ]
+        out_csv = "PAPER_TEXT_ALL_METRICS.csv"
+        out_md = "PAPER_TEXT_ALL_METRICS.md"
+    elif args.suite == 'script':
+        datasets = [
+            {'name': 'Altamira', 'band': 'ndvi'},
+            {'name': 'Brumadinho', 'band': 'ndwi'},
+            {'name': 'Mariana', 'band': 'gvmi'}
+        ]
+        out_csv = "THREE_DATASETS_ALL_METRICS.csv"
+        out_md = "THREE_DATASETS_ALL_METRICS.md"
+    else: # all
+        datasets = [
+            {'name': 'Altamira', 'band': 'ndvi'},
+            {'name': 'Brumadinho', 'band': 'ndwi'},
+            {'name': 'Mariana', 'band': 'gvmi'},
+            {'name': 'Brumadinho_Landsat', 'band': 'ndvi'},
+            {'name': 'Mariana_Sentinel', 'band': 'ndwi'}
+        ]
+        out_csv = "ALL_SUITES_ALL_METRICS.csv"
+        out_md = "ALL_SUITES_ALL_METRICS.md"
     
     all_results = []
     for item in datasets:
@@ -222,6 +250,14 @@ def main():
     print("=====================================================================================================================================================")
     print(df_res.to_string(index=False))
     print("=====================================================================================================================================================")
+    
+    # Save CSV and MD
+    df_res.to_csv(out_csv, index=False)
+    with open(out_md, "w", encoding="utf-8") as f:
+        f.write(f"# Complete Unsupervised Metrics Suite ({args.suite.upper()} Configuration)\n\n")
+        f.write(df_res.to_markdown(index=False))
+        f.write("\n")
+    print(f"\nSaved metrics summary to {out_csv} and {out_md}!")
 
 if __name__ == '__main__':
     main()

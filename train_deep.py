@@ -178,14 +178,44 @@ def train_lstm_autoencoder(dataset_name='Altamira', index_name='NDVI', batch_siz
                 print(f"Logged {run_name} successfully!")
 
 if __name__ == '__main__':
-    # The 5 official dataset/index combinations from the baseline
-    combinations = [
-        ('Altamira', 'NDVI'),
-        ('Brumadinho', 'NDVI'),
-        ('Brumadinho', 'NDWI'),
-        ('Mariana', 'NDWI'),
-        ('Mariana', 'GVMI')
-    ]
-    
-    for dataset, index in combinations:
-        train_lstm_autoencoder(dataset_name=dataset, index_name=index)
+    import argparse
+    parser = argparse.ArgumentParser(description="Train LSTM Autoencoder on Spatio-Temporal Datasets")
+    parser.add_argument('--suite', type=str, default='all', choices=['all', 'script', 'paper_text'],
+                        help="Dataset suite to train: 'script' (DynaLand codebase), 'paper_text' (literal paper text), or 'all'")
+    parser.add_argument('--dataset', type=str, default=None, help="Specific dataset name (e.g. Brumadinho_Landsat)")
+    parser.add_argument('--index', type=str, default=None, help="Specific index name (e.g. NDVI)")
+    parser.add_argument('--batch_size', type=int, default=512, help="Batch size for training and evaluation")
+    args = parser.parse_args()
+
+    if args.dataset and args.index:
+        train_lstm_autoencoder(dataset_name=args.dataset, index_name=args.index, batch_size=args.batch_size)
+    elif args.suite == 'paper_text':
+        paper_text_combinations = [
+            ('Altamira', 'NDVI'),
+            ('Brumadinho_Landsat', 'NDVI'),
+            ('Mariana_Sentinel', 'NDWI')
+        ]
+        for dataset, index in paper_text_combinations:
+            train_lstm_autoencoder(dataset_name=dataset, index_name=index, batch_size=args.batch_size)
+    elif args.suite == 'script':
+        script_combinations = [
+            ('Altamira', 'NDVI'),
+            ('Brumadinho', 'NDVI'),
+            ('Brumadinho', 'NDWI'),
+            ('Mariana', 'NDWI'),
+            ('Mariana', 'GVMI')
+        ]
+        for dataset, index in script_combinations:
+            train_lstm_autoencoder(dataset_name=dataset, index_name=index, batch_size=args.batch_size)
+    else: # 'all'
+        all_combinations = [
+            ('Altamira', 'NDVI'),
+            ('Brumadinho', 'NDVI'),
+            ('Brumadinho', 'NDWI'),
+            ('Mariana', 'NDWI'),
+            ('Mariana', 'GVMI'),
+            ('Brumadinho_Landsat', 'NDVI'),
+            ('Mariana_Sentinel', 'NDWI')
+        ]
+        for dataset, index in all_combinations:
+            train_lstm_autoencoder(dataset_name=dataset, index_name=index, batch_size=args.batch_size)
