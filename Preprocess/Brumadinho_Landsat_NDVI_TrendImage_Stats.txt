@@ -1,0 +1,7 @@
+Dataset: Brumadinho_Landsat
+Band: ndvi
+Trend Image Mean: 0.508620
+Trend Image Std Dev: 0.184314
+Trend Image Min: -0.451105
+Trend Image Max: 0.736899
+Trend Image Median: 0.592320
