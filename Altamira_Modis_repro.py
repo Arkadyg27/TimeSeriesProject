@@ -10,11 +10,11 @@ def main():
     df_raw = repro_utils.load_raw_data(dataset_name, band_name)
     print(f"Raw data loaded. Shape: {df_raw.shape}")
     
-    # 1. Sweep Isolation Forest parameters
+    # 1. Sweep Isolation Forest parameters (exact paper sweep)
     alpha_if = 1.0
     beta_if = None
     model_type_if = 'IsolationForest'
-    n_estimators_list = [20, 40, 60, 80]
+    n_estimators_list = [20, 40, 60, 80, 100]
     
     for leak_free in [False, True]:
         print(f"\n--- Running Isolation Forest (leak_free={leak_free}) ---")
@@ -24,7 +24,7 @@ def main():
                 dataset_name, band_name, alpha_if, beta_if, model_type_if, model_params, leak_free
             )
                 
-    # 2. Sweep One-Class SVM parameters
+    # 2. Sweep One-Class SVM parameters (exact paper sweep)
     alpha_oc = 0.5
     beta_oc = 0.005
     model_type_oc = 'OneClassSVM'
