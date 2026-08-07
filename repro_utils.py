@@ -463,14 +463,14 @@ def fit_model(model_type, model_params, train_data):
     if use_gpu:
         try:
             import cuml
-            if model_type == 'OneClassSVM' and hasattr(cuml.svm, 'OneClassSVM'):
+            if model_type in ['OneClassSVM', 'OCSVM'] and hasattr(cuml.svm, 'OneClassSVM'):
                 clf = cuml.svm.OneClassSVM(
                     nu=model_params.get('nu', 0.05),
                     kernel=model_params.get('kernel', 'rbf'),
                     gamma=model_params.get('gamma', 'auto')
                 ).fit(train_data_2d)
                 return clf
-            elif model_type == 'IsolationForest' and hasattr(getattr(cuml, 'ensemble', None), 'IsolationForest'):
+            elif model_type in ['IsolationForest', 'IF'] and hasattr(getattr(cuml, 'ensemble', None), 'IsolationForest'):
                 clf = cuml.ensemble.IsolationForest(
                     n_estimators=model_params.get('n_estimators', 40),
                     random_state=42
@@ -480,14 +480,14 @@ def fit_model(model_type, model_params, train_data):
             print(f"[WARNING] GPU fitting failed ({e}). Falling back to CPU (scikit-learn).")
 
     # Standard CPU Fallback (scikit-learn)
-    if model_type == 'IsolationForest':
+    if model_type in ['IsolationForest', 'IF']:
         from sklearn.ensemble import IsolationForest
         return IsolationForest(
             n_estimators=model_params.get('n_estimators', 40),
             random_state=42,
             n_jobs=-1
         ).fit(train_data_2d)
-    elif model_type == 'OneClassSVM':
+    elif model_type in ['OneClassSVM', 'OCSVM']:
         from sklearn.svm import OneClassSVM
         return OneClassSVM(
             nu=model_params.get('nu', 0.05),
