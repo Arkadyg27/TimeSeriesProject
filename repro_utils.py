@@ -597,10 +597,17 @@ def run_experiment_pipeline(df_raw, centered_vals, alpha, beta, model_type, mode
         
         train_data = all_vals[(all_vals > inf_lim) & (all_vals < sup_lim)]
         
-        if model_type == 'OneClassSVM' and beta is not None:
+        max_samples = 30000
+        if model_type in ['OneClassSVM', 'OCSVM'] and beta is not None:
             size_opt = int(beta * len(train_data))
-            dataind = np.random.choice(len(train_data), size=size_opt, replace=False)
-            train_data = train_data[dataind]
+            size_opt = min(size_opt, max_samples)
+            if size_opt > 0:
+                dataind = np.random.choice(len(train_data), size=size_opt, replace=False)
+                train_data = train_data[dataind]
+        else:
+            if len(train_data) > max_samples:
+                dataind = np.random.choice(len(train_data), size=max_samples, replace=False)
+                train_data = train_data[dataind]
             
         print(f"  Fitting {model_type} on {len(train_data)} training samples...")
         clf = fit_model(model_type, model_params, train_data)
