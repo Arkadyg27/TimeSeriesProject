@@ -130,15 +130,13 @@ def evaluate_dataset(dataset_name, band_name):
         
     centered_vals = repro_utils.get_centered_data(df_raw, dataset_name, band_name, leak_free=True)
     
-    # Setup MLflow Experiment
-    os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
-    mlflow.set_experiment(f"Unsupervised_Full_Suite_{dataset_name}")
+    # Setup MLflow Experiment safely
+    repro_utils.safe_set_experiment(f"Unsupervised_Full_Suite_{dataset_name}")
     
     results = []
     
     # 1. Z-Score Baseline
     print("1. Evaluating Z-Score Baseline...")
-    t0 = time.time()
     df_pred_base, _, exec_time_base = repro_utils.run_baseline_pipeline(df_raw, centered_vals, alpha=1.0, leak_free=True)
     m_base = compute_full_unsupervised_metrics_suite(df_pred_base, exec_time_base, dataset_name)
     
@@ -162,8 +160,22 @@ def evaluate_dataset(dataset_name, band_name):
         
     results.append({'Dataset': dataset_name, 'Model': 'Isolation Forest', 'SCP': f"{m_if['spatial_coherence_scp']:.4f}", 'SFR': f"{m_if['flicker_ratio_sfr']:.4f}", 'TPR': f"{m_if['temporal_persistence_tpr']:.4f}", 'Cluster Size': f"{m_if['avg_cluster_size']:.2f}", 'Entropy H': f"{m_if['temporal_entropy_h']:.4f}", 'CNR Event': f"{m_if['disaster_contrast_cnr']:.2f}x", 'Exec Time (s)': f"{m_if['execution_time_seconds']:.1f}s", 'Speed (ms/px)': f"{m_if['inference_speed_ms_per_pixel']:.3f}ms"})
 
-    # 3. LSTM Autoencoder
-    print("3. Evaluating LSTM Autoencoder...")
+    # 3. One-Class SVM (leak_free=True, default parameters, no sweep)
+    print("3. Evaluating One-Class SVM (leak_free=True)...")
+    df_pred_ocsvm, _, exec_time_ocsvm = repro_utils.run_experiment_pipeline(
+        df_raw, centered_vals, alpha=1.0, beta=None, model_type='OCSVM',
+        model_params={'nu': 0.05, 'gamma': 'scale'}, leak_free=True
+    )
+    m_ocsvm = compute_full_unsupervised_metrics_suite(df_pred_ocsvm, exec_time_ocsvm, dataset_name)
+    
+    with mlflow.start_run(run_name=f"{dataset_name}_OneClass_SVM"):
+        mlflow.log_params({"dataset": dataset_name, "band": band_name, "model": "One-Class SVM", "nu": 0.05, "gamma": "scale"})
+        mlflow.log_metrics(m_ocsvm)
+        
+    results.append({'Dataset': dataset_name, 'Model': 'One-Class SVM', 'SCP': f"{m_ocsvm['spatial_coherence_scp']:.4f}", 'SFR': f"{m_ocsvm['flicker_ratio_sfr']:.4f}", 'TPR': f"{m_ocsvm['temporal_persistence_tpr']:.4f}", 'Cluster Size': f"{m_ocsvm['avg_cluster_size']:.2f}", 'Entropy H': f"{m_ocsvm['temporal_entropy_h']:.4f}", 'CNR Event': f"{m_ocsvm['disaster_contrast_cnr']:.2f}x", 'Exec Time (s)': f"{m_ocsvm['execution_time_seconds']:.1f}s", 'Speed (ms/px)': f"{m_ocsvm['inference_speed_ms_per_pixel']:.3f}ms"})
+
+    # 4. LSTM Autoencoder
+    print("4. Evaluating LSTM Autoencoder...")
     matrix_path = f"Preprocess/{dataset_name}_{band_name.upper()}_CenteredMatrix.parquet"
     if not os.path.exists(matrix_path):
         repro_utils.run_and_log_preprocessing(dataset_name, band_name)

@@ -43,10 +43,7 @@ def train_lstm_autoencoder(dataset_name='Altamira', index_name='NDVI', batch_siz
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
     # Setup MLflow
-    os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
-    if os.environ.get("MLFLOW_TRACKING_URI"):
-        mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
-    mlflow.set_experiment(f"DeepLearning_{dataset_name}_{index_name}_LSTM_AE")
+    repro_utils.safe_set_experiment(f"DeepLearning_{dataset_name}_{index_name}_LSTM_AE")
     
     t_start = time.time()
     

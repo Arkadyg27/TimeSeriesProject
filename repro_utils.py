@@ -36,6 +36,26 @@ def init_ee():
             ee.Authenticate()
             ee.Initialize()
 
+def safe_set_experiment(experiment_name):
+    os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
+    if os.environ.get("MLFLOW_TRACKING_URI"):
+        mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
+    try:
+        mlflow.set_experiment(experiment_name)
+    except Exception:
+        try:
+            from mlflow.tracking import MlflowClient
+            client = MlflowClient()
+            exp = client.get_experiment_by_name(experiment_name)
+            if exp is not None and getattr(exp, 'lifecycle_stage', None) == 'deleted':
+                client.restore_experiment(exp.experiment_id)
+                mlflow.set_experiment(experiment_name)
+            else:
+                new_name = f"{experiment_name}_{int(time.time())}"
+                mlflow.set_experiment(new_name)
+        except Exception:
+            pass
+
 def get_dataset_config(dataset_name, band_name):
     # Configurations for both Script (DynaLand repo) and Paper-Text datasets
     if dataset_name == 'Altamira':
@@ -663,7 +683,7 @@ def log_experiment_to_mlflow(dataset_name, band_name, alpha, beta, model_type, m
         del os.environ["MLFLOW_TRACKING_URI"]
     # Set experiment
     experiment_name = f"DynaLand_{dataset_name}_{band_name.upper()}"
-    mlflow.set_experiment(experiment_name)
+    safe_set_experiment(experiment_name)
     
     # Start MLflow run
     run_name = f"{model_type}_{'leakfree' if leak_free else 'leaky'}"
@@ -750,7 +770,7 @@ def log_baseline_to_mlflow(dataset_name, band_name, alpha, leak_free):
     # Set experiment
     # Set experiment explicitly to Simple_Baseline_ZScore
     experiment_name = "Simple_Baseline_ZScore"
-    mlflow.set_experiment(experiment_name)
+    safe_set_experiment(experiment_name)
     
     # Start MLflow run
     run_name = f"{dataset_name}_{band_name.upper()}_Baseline_{'leakfree' if leak_free else 'leaky'}"
@@ -889,7 +909,7 @@ def compute_summary_unsupervised_metrics(df_pred):
 def run_and_log_preprocessing(dataset_name, band_name, alpha=0.5):
     # Set experiment
     experiment_name = "DynaLand_Baseline_Reproduction"
-    mlflow.set_experiment(experiment_name)
+    safe_set_experiment(experiment_name)
     
     run_name = f"Preprocess_{dataset_name}_{band_name.upper()}"
     with mlflow.start_run(run_name=run_name) as run:
