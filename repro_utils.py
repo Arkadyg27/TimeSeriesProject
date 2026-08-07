@@ -36,10 +36,27 @@ def init_ee():
             ee.Authenticate()
             ee.Initialize()
 
+def scrub_desktop_ini(root_dir=None):
+    if root_dir is None:
+        root_dir = os.environ.get("MLFLOW_TRACKING_URI", "mlruns")
+        if root_dir.startswith("file:///"):
+            root_dir = root_dir[8:]
+        elif root_dir.startswith("file:"):
+            root_dir = root_dir[5:]
+    if os.path.exists(root_dir):
+        for root, dirs, files in os.walk(root_dir):
+            for f in files:
+                if f.lower() == "desktop.ini":
+                    try:
+                        os.remove(os.path.join(root, f))
+                    except Exception:
+                        pass
+
 def safe_set_experiment(experiment_name):
     os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
     if os.environ.get("MLFLOW_TRACKING_URI"):
         mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
+    scrub_desktop_ini()
     try:
         mlflow.set_experiment(experiment_name)
     except Exception:
