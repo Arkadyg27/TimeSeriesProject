@@ -8,8 +8,11 @@ This repository contains the code for reconstructing and improving the methodolo
 The goal of this project is to map landscape disturbances (such as the Mariana and Brumadinho dam collapses, and intense deforestation in Altamira) using unsupervised machine learning applied to time-series remote sensing data from Google Earth Engine (GEE).
 
 ### Methodology
-1. **Paper Reconstruction (Stage 1):** We implemented the Isolation Forest (IF) and One-Class Support Vector Machine (OC-SVM) models to detect temporal anomalies.
-2. **Simple Baseline:** We implemented a classical Z-Score thresholding model to serve as a naive statistical baseline.
+1. **Paper Reconstruction (Stage 1):** We implemented the Isolation Forest (IF) and One-Class Support Vector Machine (OC-SVM) models to detect temporal anomalies across the reconstructed case study datasets:
+   - **Altamira:** MODIS (250m, NDVI)
+   - **Brumadinho:** Landsat-8 (30m, NDVI)
+   - **Mariana:** Sentinel-2 (10m, NDWI)
+2. **Simple Baseline:** We implemented a classical Z-Score thresholding model to serve as a statistical baseline (evaluated under both leaky and walk-forward leak-free settings).
 3. **Improved Method (Stage 2):** We introduced a Deep Learning approach using an **LSTM Autoencoder**. Unlike the classical methods that evaluate isolated pixel values, the LSTM captures the sequential, temporal relationships of the landscape over time, calculating reconstruction errors to flag structural anomalies.
 
 ### Technical Specifications
@@ -54,9 +57,9 @@ python run_preprocessing.py
 ### 3. Run Reconstructions & Baseline
 Run the classical anomaly detection algorithms (IF, OC-SVM) for each dataset:
 ```bash
-python Altamira_MODIS_repro.py
-python Brumadinho_Sentinel_repro.py
-python Mariana_Landsat_repro.py
+python Altamira_Modis_repro.py
+python Brumadinho_Landsat_repro.py
+python Mariana_Sentinel_repro.py
 ```
 Run the Simple Baseline (Z-Score) across all datasets:
 ```bash
@@ -73,6 +76,13 @@ Once trained, run the inference script to calculate reconstruction errors and ma
 python inference_deep.py
 ```
 
+### 5. Compute Quantitative Metrics
+Compute the full 6-metric benchmark suite (Spatial Coherence, Flicker Ratio, Persistence, Cluster Size, Entropy, Contrast Ratio):
+```bash
+python compute_custom_metrics.py
+```
+
 ## Expected Outputs
-- **MLflow Database:** All models will log their `total_anomalies`, `total_transitions`, and hyperparameters directly to the MLflow UI.
+- **MLflow Database:** All models will log their `total_anomalies`, `total_transitions`, unsupervised stability metrics, and hyperparameters directly to the MLflow UI.
 - **GeoTIFFs:** Georeferenced `.tif` anomaly maps will be saved in the `Tiff/` directory, categorized by algorithm and leak-free status.
+- **Summary Reports:** A consolidated benchmark table will be exported to `PAPER_TEXT_ALL_METRICS.csv`.
